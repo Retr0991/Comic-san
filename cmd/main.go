@@ -1,14 +1,13 @@
 package main
 
 import (
-	"bufio"
+	"Comic-san/tools"
 	"context"
 	"fmt"
 	"io"
 	"log"
 	"net/http"
 	"os"
-	"Comic-san/tools"
 
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 )
@@ -26,16 +25,13 @@ func main() {
 	u.Timeout = 60
 
 	ctx := context.Background()
-	ctx, cancel := context.WithCancel(ctx)
+	// ctx, cancel := context.WithCancel(ctx)
 
 	updates := bot.GetUpdatesChan(u)
 
 	go receiveUpdates(ctx, updates, bot)
 
-	log.Println("Bot is running. Press enter to stop.")
-
-	bufio.NewReader(os.Stdin).ReadBytes('\n')
-	cancel()
+	log.Println("Bot is running")
 }
 
 func receiveUpdates(ctx context.Context, updates tgbotapi.UpdatesChannel, bot *tgbotapi.BotAPI) {
@@ -87,10 +83,10 @@ func handleUpdates(update tgbotapi.Update, bot *tgbotapi.BotAPI) {
 
 			cbzFile.Caption = "Here is your file!"
 
-            // Send the file to the user
-            if _, err := bot.Send(cbzFile); err != nil {
-                log.Printf("Error sending document: %v", err)
-            }
+			// Send the file to the user
+			if _, err := bot.Send(cbzFile); err != nil {
+				log.Printf("Error sending document: %v", err)
+			}
 
 			// Remove the downloaded and cbz files
 			log.Printf("Removing files %s and %s", saveTo, convertedFile)
