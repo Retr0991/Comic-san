@@ -69,11 +69,11 @@ func handleUpdates(update tgbotapi.Update, bot *tgbotapi.BotAPI) {
 
 			// Download the file
 			fileName := update.Message.Document.FileName
-			_, err = os.Stat("../downloads")
-			if os.IsNotExist(err) {
-				os.Mkdir("../downloads", 0755)
-			}
-			saveTo := "../downloads/" + fileName
+			// _, err = os.Stat("../downloads")
+			// if os.IsNotExist(err) {
+			// 	os.Mkdir("../downloads", 0755)
+			// }
+			saveTo := fileName
 			err = downloadFile(bot, file.FilePath, saveTo)
 			if err != nil {
 				log.Println(err)
