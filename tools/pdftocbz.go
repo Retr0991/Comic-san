@@ -12,7 +12,7 @@ import (
 
 // Convert PDF to images using ImageMagick
 func pdfToImages(pdfPath, outputDir string) error {
-	cmd := exec.Command("pdftoppm", "-jpeg", pdfPath, filepath.Join(outputDir, "page-%03d"))
+	cmd := exec.Command("pdftoppm", "-jpeg -r 72", pdfPath, filepath.Join(outputDir, "page-%03d"))
 	return cmd.Run()
 }
 
