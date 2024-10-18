@@ -8,12 +8,57 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
+
+	"github.com/pdfcpu/pdfcpu/pkg/api"
 )
+
+func GetTotalPages(pdfPath string) (int, error) {
+	ctx, err := api.ReadContextFile(pdfPath)
+	if err != nil {
+		return 0, err
+	}
+	return ctx.PageCount, nil
+}
+
+func convertBatch(pdfPath, outputDir string, startPage, endPage int) error {
+	// Construct the command to process a batch of pages
+	cmd := exec.Command(
+		"pdftoppm", "-jpeg", "-r", "100",
+		"-f", fmt.Sprint(startPage), "-l", fmt.Sprint(endPage),
+		pdfPath, filepath.Join(outputDir, "page-%03d"),
+	)
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+
+	return cmd.Run()
+}
 
 // Convert PDF to images using ImageMagick
 func pdfToImages(pdfPath, outputDir string) error {
-	cmd := exec.Command("pdftoppm", "-jpeg -r 72 -aa no", pdfPath, filepath.Join(outputDir, "page-%03d"))
-	return cmd.Run()
+	totalPages, err := GetTotalPages(pdfPath)
+	fmt.Println("Total pages:", totalPages)
+	if err != nil {
+		return err
+	}
+	batchSize := 5
+	batch := os.Getenv("batchSize")
+	if batch != "" {
+		batchSize, _ = strconv.Atoi(batch)
+	}
+	for i := 1; i <= totalPages; i += batchSize {
+		end := i + batchSize - 1
+		if end > totalPages {
+			end = totalPages
+		}
+		fmt.Printf("Processing pages %d to %d...\n", i, end)
+		if err := convertBatch(pdfPath, outputDir, i, end); err != nil {
+			fmt.Printf("Error processing batch %d-%d: %v\n", i, end, err)
+			break
+		}
+	}
+
+	return nil
 }
 
 // Create a CBZ archive from images
