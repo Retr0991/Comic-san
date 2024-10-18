@@ -24,7 +24,7 @@ func GetTotalPages(pdfPath string) (int, error) {
 func convertBatch(pdfPath, outputDir string, startPage, endPage int) error {
 	// Construct the command to process a batch of pages
 	cmd := exec.Command(
-		"pdftoppm", "-jpeg", "-r", "100",
+		"pdftoppm", "-jpeg", "-r", "72",
 		"-f", fmt.Sprint(startPage), "-l", fmt.Sprint(endPage),
 		pdfPath, filepath.Join(outputDir, "page-%03d"),
 	)
