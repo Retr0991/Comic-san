@@ -13,6 +13,22 @@ import (
 	"github.com/pdfcpu/pdfcpu/pkg/api"
 )
 
+func getDirectorySize(dir string) (int64, error) {
+	var size int64
+
+	err := filepath.Walk(dir, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+		if !info.IsDir() { // Ignore directories
+			size += info.Size()
+		}
+		return nil
+	})
+
+	return size, err
+}
+
 func GetTotalPages(pdfPath string) (int, error) {
 	ctx, err := api.ReadContextFile(pdfPath)
 	if err != nil {
@@ -21,12 +37,12 @@ func GetTotalPages(pdfPath string) (int, error) {
 	return ctx.PageCount, nil
 }
 
-func convertBatch(pdfPath, outputDir string, startPage, endPage int) error {
+func convertBatch(pdfPath, outputDir string, reso, startPage, endPage int) error {
 	// Construct the command to process a batch of pages
 	cmd := exec.Command(
-		"pdftoppm", "-jpeg", "-r", "72",
+		"pdftoppm", "-jpeg", "-r", strconv.Itoa(reso),
 		"-f", fmt.Sprint(startPage), "-l", fmt.Sprint(endPage),
-		pdfPath, filepath.Join(outputDir, "page-%03d"),
+		pdfPath, filepath.Join(outputDir, "output"),
 	)
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
@@ -35,7 +51,7 @@ func convertBatch(pdfPath, outputDir string, startPage, endPage int) error {
 }
 
 // Convert PDF to images using ImageMagick
-func pdfToImages(pdfPath, outputDir string) error {
+func pdfToImages(pdfPath, outputDir string, reso int) error {
 	totalPages, err := GetTotalPages(pdfPath)
 	fmt.Println("Total pages:", totalPages)
 	if err != nil {
@@ -52,12 +68,26 @@ func pdfToImages(pdfPath, outputDir string) error {
 			end = totalPages
 		}
 		fmt.Printf("Processing pages %d to %d...\n", i, end)
-		if err := convertBatch(pdfPath, outputDir, i, end); err != nil {
+		if err := convertBatch(pdfPath, outputDir, reso, i, end); err != nil {
 			fmt.Printf("Error processing batch %d-%d: %v\n", i, end, err)
 			break
 		}
 	}
+	size, err := getDirectorySize(outputDir)
+	if err != nil {
+		fmt.Println("Error:", err)
+		return err
+	}
 
+	// Convert bytes to MB
+	sizeMB := float64(size) / (1024 * 1024)
+
+	fmt.Println(sizeMB)
+	if sizeMB > 49.9 {
+		return pdfToImages(pdfPath, outputDir, 72)
+	} else if sizeMB < 10 {
+		return pdfToImages(pdfPath, outputDir, 300)
+	}
 	return nil
 }
 
@@ -110,7 +140,7 @@ func ConvertToCBZ(pdfPath, fileName string) string {
 
 	// Step 2: Convert PDF to images
 	log.Println("Extracting PDF pages as images...")
-	if err := pdfToImages(pdfPath, imagesDir); err != nil {
+	if err := pdfToImages(pdfPath, imagesDir, 150); err != nil {
 		log.Fatalf("Failed to convert PDF to images: %v", err)
 	}
 
