@@ -94,7 +94,8 @@ func handleUpdates(update tgbotapi.Update, bot *tgbotapi.BotAPI) {
 				return float64(info.Size()) / (1024 * 1024)
 			} (convertedFile)
 			
-			if (sizeOfconvertedFile > 50) {
+			log.Printf("Final Size of CBZ : %v\n", sizeOfconvertedFile)
+			if (sizeOfconvertedFile < 50) {
 				// Send the CBZ file to the user
 				cbzFile := tgbotapi.NewDocument(update.Message.Chat.ID, tgbotapi.FilePath(convertedFile))
 
