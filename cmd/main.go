@@ -85,15 +85,31 @@ func handleUpdates(update tgbotapi.Update, bot *tgbotapi.BotAPI) {
 			// Convert the PDF to CBZ
 			convertedFile := tools.ConvertToCBZ(saveTo, fileName[:len(fileName)-4])
 
-			// Send the CBZ file to the user
+			sizeOfconvertedFile := func (convertedFile string) float64 {
+				info, err := os.Stat(convertedFile)
+				if err != nil {
+					log.Printf("failed to get file info for %s: %v", convertedFile, err)
+					return 0
+				}
+				return float64(info.Size()) / (1024 * 1024)
+			} (convertedFile)
+			
+			if (sizeOfconvertedFile > 50) {
+				// Send the CBZ file to the user
+				cbzFile := tgbotapi.NewDocument(update.Message.Chat.ID, tgbotapi.FilePath(convertedFile))
 
-			cbzFile := tgbotapi.NewDocument(update.Message.Chat.ID, tgbotapi.FilePath(convertedFile))
+				cbzFile.Caption = "Here is your file!"
 
-			cbzFile.Caption = "Here is your file!"
-
-			// Send the file to the user
-			if _, err := bot.Send(cbzFile); err != nil {
-				log.Printf("Error sending document: %v", err)
+				// Send the file to the user
+				if _, err := bot.Send(cbzFile); err != nil {
+					log.Printf("Error sending document: %v", err)
+				}
+			} else {
+				// Send error message to the user
+				msg := tgbotapi.NewMessage(update.Message.Chat.ID, "The file is too large to send. Please try again with a smaller file.")
+				if _, err := bot.Send(msg); err != nil {
+					log.Printf("Error sending error message: %v", err)
+				}
 			}
 
 			// Remove the downloaded and cbz files
