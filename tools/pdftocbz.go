@@ -83,9 +83,7 @@ func pdfToImages(pdfPath, outputDir string, reso int) error {
 	sizeMB := float64(size) / (1024 * 1024)
 
 	// fmt.Printf("Final Size of all Images : %v\n", sizeMB)
-	if sizeMB > 49.9 && reso != 72 {
-		return pdfToImages(pdfPath, outputDir, 72)
-	} else if sizeMB < 10 && reso != 300 {
+	if sizeMB < 10 && reso != 300 {
 		return pdfToImages(pdfPath, outputDir, 300)
 	}
 	return nil

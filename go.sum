@@ -1,5 +1,5 @@
-github.com/go-telegram-bot-api/telegram-bot-api/v5 v5.5.1 h1:wG8n/XJQ07TmjbITcGiUaOtXxdrINDz1b0J1w0SzqDc=
-github.com/go-telegram-bot-api/telegram-bot-api/v5 v5.5.1/go.mod h1:A2S0CWkNylc2phvKXWBBdD3K0iGnDBGbzRpISP2zBl8=
+github.com/Retr0991/telegram-bot-api v0.0.0-20241106154858-d8528711fc76 h1:fjyGlDe4pwv8f2k6YNazWJ9W4h5DzZKOwxW2LQ3+XZo=
+github.com/Retr0991/telegram-bot-api v0.0.0-20241106154858-d8528711fc76/go.mod h1:tg4cKcrqUjfXd2FjIH1v5lUth58r35BMNSbK48z4A+M=
 github.com/hhrutter/lzw v1.0.0 h1:laL89Llp86W3rRs83LvKbwYRx6INE8gDn0XNb1oXtm0=
 github.com/hhrutter/lzw v1.0.0/go.mod h1:2HC6DJSn/n6iAZfgM3Pg+cP1KxeWc3ezG8bBqW5+WEo=
 github.com/hhrutter/tiff v1.0.1 h1:MIus8caHU5U6823gx7C6jrfoEvfSTGtEFRiM8/LOzC0=

@@ -11,15 +11,20 @@ import (
 	"os/signal"
 	"syscall"
 
-	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
+	tgbotapi "github.com/Retr0991/telegram-bot-api"	
 )
 
-func main() {
-	bot, err := tgbotapi.NewBotAPI(os.Getenv("API_TOKEN"))
-	if err != nil {
-		panic(err)
-	}
+var apiEndpoint = os.Getenv("API_ENDPOINT")
 
+func main() {
+
+	botToken := os.Getenv("API_TOKEN")
+	
+	bot, err := tgbotapi.NewBotAPIWithAPIEndpoint(botToken, apiEndpoint)
+	if err != nil {
+		log.Fatalf("%v", err)							
+	}
+	
 	bot.Debug = true
 	log.Printf("Authorized on account %s", bot.Self.UserName)
 
@@ -85,17 +90,16 @@ func handleUpdates(update tgbotapi.Update, bot *tgbotapi.BotAPI) {
 			// Convert the PDF to CBZ
 			convertedFile := tools.ConvertToCBZ(saveTo, fileName[:len(fileName)-4])
 
-			sizeOfconvertedFile := func (convertedFile string) float64 {
-				info, err := os.Stat(convertedFile)
-				if err != nil {
-					log.Printf("failed to get file info for %s: %v", convertedFile, err)
-					return 0
-				}
-				return float64(info.Size()) / (1024 * 1024)
-			} (convertedFile)
-			
-			log.Printf("Final Size of CBZ : %v\n", sizeOfconvertedFile)
-			if (sizeOfconvertedFile < 50) {
+			// sizeOfconvertedFile := func (convertedFile string) float64 {
+			// 	info, err := os.Stat(convertedFile)
+			// 	if err != nil {
+			// 		log.Printf("failed to get file info for %s: %v", convertedFile, err)
+			// 		return 0
+			// 	}
+			// 	return float64(info.Size()) / (1024 * 1024)
+			// } (convertedFile)
+			// log.Printf("Final Size of CBZ : %v\n", sizeOfconvertedFile)
+			// if (sizeOfconvertedFile < 50) {
 				// Send the CBZ file to the user
 				cbzFile := tgbotapi.NewDocument(update.Message.Chat.ID, tgbotapi.FilePath(convertedFile))
 
@@ -105,13 +109,13 @@ func handleUpdates(update tgbotapi.Update, bot *tgbotapi.BotAPI) {
 				if _, err := bot.Send(cbzFile); err != nil {
 					log.Printf("Error sending document: %v", err)
 				}
-			} else {
-				// Send error message to the user
-				msg := tgbotapi.NewMessage(update.Message.Chat.ID, "The file is too large to send. Please try again with a smaller file.")
-				if _, err := bot.Send(msg); err != nil {
-					log.Printf("Error sending error message: %v", err)
-				}
-			}
+			// } else {
+			// 	// Send error message to the user
+			// 	msg := tgbotapi.NewMessage(update.Message.Chat.ID, "The file is too large to send.")
+			// 	if _, err := bot.Send(msg); err != nil {
+			// 		log.Printf("Error sending error message: %v", err)
+			// 	}
+			// }
 
 			// Remove the downloaded and cbz files
 			log.Printf("Removing files %s and %s", saveTo, convertedFile)
@@ -127,7 +131,7 @@ func handleUpdates(update tgbotapi.Update, bot *tgbotapi.BotAPI) {
 }
 
 func downloadFile(bot *tgbotapi.BotAPI, filePath, saveTo string) error {
-	url := fmt.Sprintf("https://api.telegram.org/file/bot%s/%s", bot.Token, filePath)
+	url := fmt.Sprintf("%s/file/bot%s/%s", apiEndpoint, bot.Token, filePath)
 
 	// Create the file locally
 	out, err := os.Create(saveTo)

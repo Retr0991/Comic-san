@@ -3,7 +3,7 @@ module Comic-san
 go 1.22.5
 
 require (
-	github.com/go-telegram-bot-api/telegram-bot-api/v5 v5.5.1
+	github.com/Retr0991/telegram-bot-api v0.0.0-20241106154858-d8528711fc76
 	github.com/pdfcpu/pdfcpu v0.8.1
 )
 
