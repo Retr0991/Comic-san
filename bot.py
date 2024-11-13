@@ -1,180 +1,298 @@
-CUSTOM_BOT_API_SERVER = 'http://localhost:8081'
-
 import logging
-import subprocess
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram.ext import (Application, CommandHandler, ContextTypes, 
+MessageHandler, filters, ConversationHandler, CallbackQueryHandler)
+from handler import (alive, format_asura_url,
+              sendCBZ, get_range)
+import json
+import dotenv
+import os
 
-from telegram import ForceReply, Update
+dotenv.load_dotenv()
+TOKEN = os.getenv("TOKEN")
 
-from telegram.ext import Application, CommandHandler, ContextTypes, MessageHandler, filters, ConversationHandler
+saved_data = {}
+with open("data.json", "r") as file:
+    saved_data = json.load(file)
 
-authenticatedUsers = []
+
+# Stages            
+START_ROUTES, GET_URL, SAVE_ROUTE, JOB, CHAPTER_INPUT = range(5)
+
+# Callback data
+ONE, TWO, THREE, FOUR = range(4)
 
 # Enable logging
-
 logging.basicConfig(
-
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", level=logging.INFO
-
 )
 
 # set higher logging level for httpx to avoid all GET and POST requests being logged
-
 logging.getLogger("httpx").setLevel(logging.WARNING)
-
 
 logger = logging.getLogger(__name__)
 
-def restricted(func):
-    """Decorator to restrict access to authenticated users."""
-    async def wrapped(update: Update, context: ContextTypes.DEFAULT_TYPE, *args, **kwargs):
-        user_id = update.effective_user.id
-        if user_id not in authenticatedUsers:
-            await update.message.reply_text("You are not authorized to use this bot.")
-            return
-        return await func(update, context, *args, **kwargs)
-    return wrapped
 
-# Define a few command handlers. These usually take the two arguments update and
+async def select_channel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Choose CHANNEL"""
+    # Get user that sent /start and log his name
+    user = update.message.from_user
 
-# context.
+    logger.info("User %s started the conversation.", user.first_name)
 
-async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    """Send a message when the command /start is issued and prompt for the secret key."""
-    user = update.effective_user
-    await update.message.reply_html(
-        rf"Hi {user.full_name}!\nEnter secret key",
-        reply_markup=ForceReply(selective=True),
-    )
-    return 1  # Move to the next state to wait for the user's response
+    # Build InlineKeyboard where each button has a displayed text
+    # and a string as callback_data
+    # The keyboard is a list of button rows, where each row is in turn
+    # a list (hence `[[...]]`).
 
-async def check_secret_key(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    """Check if the received message contains the secret key."""
-    user_id = update.effective_user.id
-    message_text = update.message.text
+    keyboard = [
+        [
+            InlineKeyboardButton("Asura", callback_data=str(ONE)),
+            InlineKeyboardButton("Cancel", callback_data=str(TWO)),
+        ]
+    ]
 
-    if SECRET_KEY in message_text:
-        if user_id not in authenticatedUsers:
-            authenticatedUsers.append(user_id)
-            await update.message.reply_text("You have been authenticated.")
-        else:
-            await update.message.reply_text("You are already authenticated.")
+    reply_markup = InlineKeyboardMarkup(keyboard)
+
+    # Send message with text and appended InlineKeyboard
+    await update.message.reply_text("Choose the site to fetch", reply_markup=reply_markup)
+
+    # Tell ConversationHandler that we're in state `FIRST` now
+    return START_ROUTES
+
+
+async def asura(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Get the series URL"""
+    query = update.callback_query
+    await query.answer()
+    await query.edit_message_text(text="Selected Asura\nEnter the URL of the Manhwa")
+    return GET_URL
+
+async def getManhwaDetails(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Handle URL and name input"""
+    if 'url' not in context.user_data:
+        # First message - store URL
+        context.user_data['url'] = format_asura_url(update.message.text + '/')
+        await update.message.reply_text("Enter the name of the Manhwa")
+        return GET_URL
     else:
-        await update.message.reply_text("Invalid secret key. Please try again.")
-        return ConversationHandler.END  # Stay in the current state to wait for the correct secret key
+        # Second message - store name and show confirmation
+        name = update.message.text
+        while name in [1, 2]:
+            await update.message.reply_text("Invalid name. Enter the name of the Manhwa")
+            return GET_URL
+        context.user_data['name'] = name
+        url = context.user_data['url']
+        
+        await update.message.reply_text(f"URL set to: `{url}`\nName: `{name}`", parse_mode='MarkdownV2')
+        
+        keyboard = [
+            [
+                InlineKeyboardButton("Save", callback_data=str(ONE)),
+                InlineKeyboardButton("Nah", callback_data=str(TWO)),
+            ]
+        ]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        await update.message.reply_text("Do you want to save the details?", reply_markup=reply_markup)
+        return SAVE_ROUTE
 
-    return ConversationHandler.END  # End the conversation
+
+async def save(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Save the Manhwa details"""
+    query = update.callback_query
+    await query.answer()
+
+    url = context.user_data['url']
+    name = context.user_data['name']
+    saved_data[name] = url
+    with open("data.json", "w") as file:
+        json.dump(saved_data, file)
+
+    await query.edit_message_text(text=f"Record `{name}` has been saved", parse_mode='MarkdownV2')
+
+    context.user_data.clear()
+    return ConversationHandler.END
+
+
+
+async def set_chapter(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Get Chapter(s) to download"""
+
+    query = update.callback_query
+    await query.answer()
+
+    if query.data in saved_data:
+        context.user_data['url'] = saved_data[query.data]
+        context.user_data['name'] = query.data
+
+    keyboard = [
+        [
+            InlineKeyboardButton("Get Latest Chapter", callback_data=str(ONE)),
+            InlineKeyboardButton("Custom", callback_data=str(TWO)),
+        ]
+    ]
+
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    await query.edit_message_text("Select the chapter(s) to download", reply_markup=reply_markup)
+
+    return JOB
+
+async def single_job(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Performs latest chapter download"""
+    query = update.callback_query
+    await query.answer()
+
+    url = context.user_data['url']
+    name = context.user_data['name']
+    await query.edit_message_text(text="Starting Job")
+
+    await sendCBZ(query, url, "latest", name)
+
+    context.user_data.clear()
+    return ConversationHandler.END
+
+
+async def custom_job(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Performs custom chapter download"""
+    query = update.callback_query
+    await query.answer()
+
+    # If first time, prompt for input
+    if 'chapters' not in context.user_data:
+        await query.edit_message_text(text="Set chapter range")
+        return CHAPTER_INPUT
     
+    expression = context.user_data['chapters']
+    li = get_range(expression)
+    logger.info(f"List formed: {li}")
+    url = context.user_data['url']
+    name = context.user_data['name']
+    await query.edit_message_text(text="Starting Custom Job")
+    for chapter in li:
+        await sendCBZ(query, url, chapter, name)
 
-@restricted
-async def getStats(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-        """Send a message when the command /alive is issued."""
+    context.user_data.clear()
+    return ConversationHandler.END
 
-        cpu = subprocess.run(["top -bn1 | grep 'Cpu(s)' | awk '{print $2 + $4}'"], shell=True, capture_output=True, text=True).stdout.strip()
-        memory = subprocess.run(["free | grep Mem | awk '{printf \"%.2f\", $3/$2 * 100.0}'"], shell=True, capture_output=True, text=True).stdout.strip()
-        uptime = subprocess.run(["uptime -p"], shell=True, capture_output=True, text=True).stdout.strip()
-        await update.message.reply_text(f"System Info\n"
-                                        f"- {uptime}\n"
-                                        f"- CPU: {cpu}%\n"
-                                        f"- Memory: {memory}%")
+async def handle_chapter_input(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Handle chapter range input"""
+    expression = update.message.text
+    context.user_data['chapters'] = expression
 
+    keyboard = [
+        [
+            InlineKeyboardButton("Continue", callback_data=str(TWO)),
+            InlineKeyboardButton("Cancel", callback_data=str(FOUR)),
+        ]
+    ]
 
-async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    await update.message.reply_text(f"Selected Range:\n{get_range(expression)}", reply_markup=reply_markup)
+    return JOB
 
-    """Send a message when the command /help is issued."""
+async def show_saved_data(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Show saved data"""
+    user = update.message.from_user
 
-    await update.message.reply_text("Fake Help message")
+    keyboard = []
+    for key in saved_data:
+        keyboard.append([InlineKeyboardButton(key, callback_data=key)])
 
+    keyboard.append([InlineKeyboardButton("Cancel", callback_data=str(FOUR))])
 
-@restricted
-async def echo(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    await update.message.reply_text("Select the record to download", reply_markup=reply_markup)
 
-    """Echo the user message."""
+    return JOB
 
-    await update.message.reply_text(update.message.text)
-
-@restricted
-async def handlePDF(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+async def end_conversation(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Clear user data and end conversation"""
+    if update.callback_query:
+        query = update.callback_query
+        await query.answer()
+        await query.edit_message_text("Conversation ended.")
+    elif update.message:
+        await update.message.reply_text("Conversation ended.")
     
-        """Handle PDF files."""
-    
-        document = update.message.document
-    
-        if document.mime_type == 'application/pdf':
-    
-            try:
-                # Download the file
-                file = await context.bot.get_file(document.file_id,
-                                                  read_timeout=60,
-                                                  write_timeout=60)
-                file_path = f"{document.file_name}"
-                await file.download_to_drive(file_path, write_timeout=60)
-                logger.info("File downloaded successfully to %s", file_path)
-
-                # run command line comands
-                try:
-                    subprocess.run(["./conv", file_path, file_path[:-4]])
-                except Exception as e:
-                    logger.error("Error while converting%s", e)
-                    await update.message.reply_text("Error while converting the file")
-
-                cbz_file_path = file_path[:-3]+'cbz'
-
-                # Send the file back to the user
-                await update.message.reply_document(cbz_file_path,
-                                                    read_timeout=60,
-                                                    write_timeout=60)
-                logger.info("File sent back to the user successfully: %s", cbz_file_path)
-
-                # delete the file
-                subprocess.run(["rm", file_path])
-                subprocess.run(["rm", file_path[:-3]+'cbz'])
-    
-            except Exception as e:
-                logger.error("Error: %s", e)
-                await update.message.reply_text("Error while downloading the file: %s", e)
-
+    context.user_data.clear()
+    return ConversationHandler.END
 
 
 def main() -> None:
+    """ Start thr Bot """
 
-    """Start the bot."""
+    app = Application.builder().token(TOKEN).build()
 
-    # Create the Application and pass it your bot's token.
+    # app.add_handler(CommandHandler("start", start))
+    app.add_handler(CommandHandler("alive", alive))
 
-    application = Application.builder().token(TOKEN).base_url(CUSTOM_BOT_API_SERVER+'/bot').local_mode(True).build()
-
-    # Create a conversation handler with the states
     conv_handler = ConversationHandler(
-        entry_points=[CommandHandler("start", start)],
+
+        entry_points=[CommandHandler("select", select_channel)],
+
         states={
-            1: [MessageHandler(filters.TEXT & ~filters.COMMAND, check_secret_key)],
+
+            START_ROUTES: [
+
+                CallbackQueryHandler(asura, pattern="^" + str(ONE) + "$"),
+                CallbackQueryHandler(end_conversation, pattern="^" + str(TWO) + "$"),
+
+            ],
+
+            GET_URL: [
+                MessageHandler(filters.TEXT & ~filters.COMMAND, getManhwaDetails),
+            ],
+
+            SAVE_ROUTE: [
+
+                CallbackQueryHandler(save, pattern="^" + str(ONE) + "$"),
+                CallbackQueryHandler(set_chapter, pattern="^" + str(TWO) + "$"),
+
+            ],
+
+            JOB: [
+                CallbackQueryHandler(single_job, pattern="^" + str(ONE) + "$"),
+                CallbackQueryHandler(custom_job, pattern="^" + str(TWO) + "$"),
+                CallbackQueryHandler(set_chapter, pattern="^" + str(THREE) + "$"),
+                CallbackQueryHandler(end_conversation, pattern="^" + str(FOUR) + "$"),
+            ],
+
+            CHAPTER_INPUT: [
+                MessageHandler(filters.TEXT & ~filters.COMMAND, handle_chapter_input)
+            ]
+
         },
-        fallbacks=[],
+
+        fallbacks=[
+            CommandHandler("cancel", end_conversation),
+            CallbackQueryHandler(end_conversation, pattern="^" + str(FOUR) + "$"),
+        ],
+
+        per_message=False
     )
 
-    # Add handlers
-    application.add_handler(conv_handler)
+    saved_data_conv_handler = ConversationHandler(
+        entry_points=[CommandHandler("saved", show_saved_data)],
+        states={
+            JOB: [
+                CallbackQueryHandler(single_job, pattern="^" + str(ONE) + "$"),
+                CallbackQueryHandler(custom_job, pattern="^" + str(TWO) + "$"),
+                CallbackQueryHandler(set_chapter, pattern="^(?!(" + str(ONE) + "|" + str(TWO) + "|" + str(FOUR) + ")$).*$"),
+                CallbackQueryHandler(end_conversation, pattern="^" + str(FOUR) + "$"),
+            ],
+            CHAPTER_INPUT: [
+                MessageHandler(filters.TEXT & ~filters.COMMAND, handle_chapter_input)
+            ]
+        },
+        fallbacks=[CommandHandler("cancel", end_conversation)],
+        per_message=False
+    )
 
-    # on different commands - answer in Telegram
-
-    application.add_handler(CommandHandler("start", start))
-
-    application.add_handler(CommandHandler("help", help_command))
-
-    application.add_handler(CommandHandler("alive", getStats))
+    app.add_handler(conv_handler)
+    app.add_handler(saved_data_conv_handler)
 
 
-    # on non command i.e message - echo the message on Telegram
-
-    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, echo))
-
-    application.add_handler(MessageHandler(filters.ATTACHMENT, handlePDF))
-
-
-    # Run the bot until the user presses Ctrl-C
-
-    application.run_polling(allowed_updates=Update.ALL_TYPES)
-
+    app.run_polling(allowed_updates=Update.ALL_TYPES)
 
 
 if __name__ == "__main__":
