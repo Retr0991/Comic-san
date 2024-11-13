@@ -23,7 +23,7 @@ def random_string(length: int) -> str:
 
 async def getCBZ(url: str, chapter: int | str, name: str) -> str:
 
-    image_folder = 'images-' + random_string(20)
+    image_folder = 'images'
 
     if chapter == 'latest':
         chapter = get_latest_chapter(url)
@@ -37,6 +37,6 @@ async def getCBZ(url: str, chapter: int | str, name: str) -> str:
         for file in files:
             file_path = os.path.join(root, file)
             os.remove(file_path)
-    os.rmdir(image_folder)
+    # os.rmdir(image_folder)
     
     return cbz_name
