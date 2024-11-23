@@ -3,7 +3,7 @@ SECRET_KEY=''
 from telegram import ForceReply, Update, CallbackQuery
 from telegram.ext import ContextTypes, ConversationHandler
 from script import getCBZ
-import subprocess, os, re
+import asyncio, os, re
 
 def restricted(func):
     """Decorator to restrict access to authenticated users."""
@@ -20,7 +20,6 @@ def authenticated(user_id):
 
 def authorize(user_id):
     pass
-
 
 def format_asura_url(url: str) -> str:
     """Format URL to match Asura Comics pattern"""
@@ -62,16 +61,34 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
 
 @restricted
 async def alive(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-        """Send a message when the command /alive is issued."""
+    """Send a message when the command /alive is issued."""
+    try:
+        # Asynchronously run subprocess commands
+        cpu = await run_command("top -bn1 | grep 'Cpu(s)' | awk '{print $2 + $4}'")
+        memory = await run_command("free | grep Mem | awk '{printf \"%.2f\", $3/$2 * 100.0}'")
+        uptime = await run_command("uptime -p")
 
-        cpu = subprocess.run(["top -bn1 | grep 'Cpu(s)' | awk '{print $2 + $4}'"], shell=True, capture_output=True, text=True).stdout.strip()
-        memory = subprocess.run(["free | grep Mem | awk '{printf \"%.2f\", $3/$2 * 100.0}'"], shell=True, capture_output=True, text=True).stdout.strip()
-        uptime = subprocess.run(["uptime -p"], shell=True, capture_output=True, text=True).stdout.strip()
         await update.message.reply_text(f"System Info\n"
                                         f"- {uptime}\n"
                                         f"- CPU: {cpu}%\n"
                                         f"- Memory: {memory}%")
-        
+    except Exception as e:
+        await update.message.reply_text(f"An error occurred: {e}")
+
+async def run_command(cmd: str) -> str:
+    """Asynchronously run a shell command and return its output."""
+    process = await asyncio.create_subprocess_shell(
+        cmd,
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.PIPE
+    )
+    stdout, stderr = await process.communicate()
+
+    if process.returncode != 0:
+        raise Exception(f"Command failed: {stderr.decode().strip()}")
+    
+    return stdout.decode().strip()
+
 async def sendCBZ(query: CallbackQuery | None, url: str, 
                   chapter: int | str, name: str) -> None:
     """Send the CBZ file to the user"""

@@ -1,12 +1,18 @@
 import os
 import requests
-from bs4 import BeautifulSoup
+from bs4 import BeautifulSoup, SoupStrainer
 from urllib.parse import urljoin
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from playwright.sync_api import sync_playwright
+
+DEBUG = False
+
+USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/58.0.3029.110 Safari/537.3"
 
 # Get latest chapter
 def get_latest_chapter(url: str) -> str:
-    response = requests.get(url)
+    headers = {"User-Agent": USER_AGENT}
+    response = requests.get(url, headers=headers)
     soup = BeautifulSoup(response.content, 'html.parser')
     # Find the specific div with the given class
     find_spans = soup.find_all('span', class_="pl-[1px]")
@@ -34,7 +40,8 @@ def download_image(img_url, folder, counter, results):
             # Save the image content
             with open(img_path, 'wb') as f:
                 f.write(img_response.content)
-            print(f"Downloaded {img_name}")
+            if DEBUG:
+                print(f"Downloaded {img_name}")
             results[counter - 1] = img_name  # Store the result in the correct order
         else:
             print(f"Failed to retrieve {img_url}")
@@ -43,18 +50,24 @@ def download_image(img_url, folder, counter, results):
 
 # Scrape all images from a specific div
 def scrape_webp_images(url: str, folder: str):
-    # Send GET
-    response = requests.get(url)
-    soup = BeautifulSoup(response.content, 'html.parser')
-    
-    # Find the specific div with the given class
-    div = soup.find('div', class_="py-8 -mx-5 md:mx-0 flex flex-col items-center justify-center")
 
-    if not div:
-        print("Div not found")
-        return
+    # Use Playwright to scrape the page
+    with sync_playwright() as p:
+        browser = p.firefox.launch(headless=True)
+        context = browser.new_context(user_agent=USER_AGENT)
+        page = context.new_page()
+        page.goto(url)
 
-    img_tags = div.find_all('img')
+        # Wait for the page to load
+        page.wait_for_timeout(2000)
+
+        # Get the HTML source
+        html_source = page.content()
+
+    # Find the specific img with the given class
+    soup = BeautifulSoup(html_source, 'html.parser')
+    img_tags = soup.find_all('img', class_="object-cover mx-auto")
+    print(len(img_tags))
 
     if not os.path.exists(folder):
         os.makedirs(folder)
@@ -81,13 +94,16 @@ def download_images_in_batches(img_urls, folder):
             future.result()  # Wait for all futures to complete
 
     # Print the results in order
-    for result in results:
-        if result:
-            print(result)
+    if DEBUG:
+        for result in results:
+            if result:
+                print(result)
 
 # Example usage
 if __name__ == '__main__':
-    website_url = "https://asuracomic.net/series/childhood-friend-of-the-zenith-ab07d211"
+    website_url = "https://asuracomic.net/series/swordmasters-youngest-son-06d1c859"
     save_folder = "images"
-    scrape_webp_images(website_url, save_folder)
-    get_latest_chapter(website_url)
+    DEBUG = True
+    chptr = get_latest_chapter(website_url)
+    print(f"Latest Chapter is {chptr}")
+    scrape_webp_images(website_url+f'/chapter/{chptr}', save_folder)
