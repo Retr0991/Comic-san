@@ -1,9 +1,10 @@
 import os
 import requests
+import asyncio
 from bs4 import BeautifulSoup, SoupStrainer
 from urllib.parse import urljoin
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from playwright.sync_api import sync_playwright
+from playwright.async_api import async_playwright
 
 DEBUG = False
 
@@ -11,8 +12,7 @@ USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTM
 
 # Get latest chapter
 def get_latest_chapter(url: str) -> str:
-    headers = {"User-Agent": USER_AGENT}
-    response = requests.get(url, headers=headers)
+    response = requests.get(url)
     soup = BeautifulSoup(response.content, 'html.parser')
     # Find the specific div with the given class
     find_spans = soup.find_all('span', class_="pl-[1px]")
@@ -49,25 +49,31 @@ def download_image(img_url, folder, counter, results):
         print(f"Error downloading {img_url}: {e}")
 
 # Scrape all images from a specific div
-def scrape_webp_images(url: str, folder: str):
+async def scrape_webp_images(url: str, folder: str):
 
     # Use Playwright to scrape the page
-    with sync_playwright() as p:
-        browser = p.firefox.launch(headless=True)
-        context = browser.new_context(user_agent=USER_AGENT)
-        page = context.new_page()
-        page.goto(url)
+    async with async_playwright() as p:
+        browser = await p.firefox.launch(headless=True)
+        context = await browser.new_context(user_agent=USER_AGENT)
+        
+        # Disable images and CSS to speed up loading
+        await context.route("**/*", lambda route, request: route.abort() if request.resource_type in ["image", "stylesheet"] else route.continue_())
+        
+        page = await context.new_page()
+        await page.goto(url)
 
-        # Wait for the page to load
-        page.wait_for_timeout(2000)
+        # Wait for the specific selector
+        await page.wait_for_selector('.object-cover.mx-auto', timeout=2000)
 
         # Get the HTML source
-        html_source = page.content()
+        html_source = await page.content()
+        await browser.close()
 
     # Find the specific img with the given class
     soup = BeautifulSoup(html_source, 'html.parser')
     img_tags = soup.find_all('img', class_="object-cover mx-auto")
-    print(len(img_tags))
+    if DEBUG:
+        print(len(img_tags))
 
     if not os.path.exists(folder):
         os.makedirs(folder)
@@ -105,5 +111,6 @@ if __name__ == '__main__':
     save_folder = "images"
     DEBUG = True
     chptr = get_latest_chapter(website_url)
-    print(f"Latest Chapter is {chptr}")
-    scrape_webp_images(website_url+f'/chapter/{chptr}', save_folder)
+    if DEBUG:
+        print(f"Latest Chapter is {chptr}")
+    asyncio.run(scrape_webp_images(website_url+f'/chapter/{chptr}', save_folder))
