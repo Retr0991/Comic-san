@@ -1,1 +1,1 @@
-worker: ./cmd/cmd
+worker: python bot.py

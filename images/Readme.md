@@ -1,0 +1,2 @@
+This Version is supposed to web scrape the images from the websites and then create cbz
+The sites have mostly webp images, which helps in preserving the quality of the images while keepin the size small. Some might have jpg images, which are converted to webp images.
