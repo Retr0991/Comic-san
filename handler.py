@@ -112,24 +112,25 @@ async def sendCBZ(query: CallbackQuery | None, url: str,
     os.remove(cbz_path)
 
 
-def get_range(expression: str) -> list[int]:
-    """Get the range of chapters from a string expression.
+def get_range(expression: str) -> list[float]:
+    """Get the range of chapters from a string expression, including standalone decimal numbers.
+
     Examples:
-        "1-5" -> [1,2,3,4,5]
-        "1,3,5" -> [1,3,5]
-        "1-3,5,7-9" -> [1,2,3,5,7,8,9]
+        "1-5" -> [1, 2, 3, 4, 5]
+        "1,3,5" -> [1, 3, 5]
+        "1-3,5,7-9" -> [1, 2, 3, 5, 7, 8, 9]
+        "0.1,0.7,3-5" -> [0.1, 0.7, 3, 4, 5]
     """
-    # Remove all non permitted characters
-    expression = re.sub(r'[^\d\-\,]', '', expression)
-    
+    # Remove all non-permitted characters (digits, commas, hyphens, and periods)
+    expression = re.sub(r'[^\d\-,\.]', '', expression)
     result = []
+
     # Split by comma and process each part
     for part in expression.split(','):
-        if '-' in part:
+        if '-' in part:  # Process ranges
             start, end = map(int, part.split('-'))
             result.extend(range(start, end + 1))
-        else:
-            if part.strip():  # Check if part is not empty
-                result.append(int(part))
-    
-    return sorted(list(set(result)))  # Remove duplicates and sort
+        elif part.strip():  # Process standalone numbers (integers or decimals)
+            result.append(float(part) if '.' in part else int(part))
+
+    return sorted(set(result))  # Remove duplicates and sort
